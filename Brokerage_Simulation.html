@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3PL Command Center: Advanced Logistics Sim</title>
+    <style>
+        :root {
+            --primary: #2c3e50;
+            --secondary: #34495e;
+            --accent: #2980b9;
+            --success: #27ae60;
+            --warning: #f39c12;
+            --danger: #c0392b;
+            --light: #ecf0f1;
+            --dark: #2c3e50;
+            --flatbed: #e67e22;
+            --reefer: #3498db;
+            --van: #95a5a6;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f7f6;
+            margin: 0;
+            padding: 0;
+            color: #333;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        /* --- HEADER & STATS --- */
+        header {
+            background-color: var(--primary);
+            color: white;
+            padding: 10px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+
+        .brand { font-size: 1.2rem; font-weight: bold; display: flex; align-items: center; gap: 10px; }
+        .stats-bar { display: flex; gap: 15px; font-size: 0.85rem; }
+        .stat-box { background: rgba(255,255,255,0.1); padding: 5px 12px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.1); }
+        .stat-label { color: #bdc3c7; font-size: 0.75rem; display: block; }
+        .stat-value { font-weight: bold; font-size: 1.1rem; }
+        .good { color: var(--success); }
+        .bad { color: var(--danger); }
+
+        /* --- LAYOUT --- */
+        .container { display: flex; flex: 1; overflow: hidden; }
+        
+        /* SIDEBAR (LOAD BOARD) */
+        .sidebar {
+            width: 380px;
+            background: white;
+            border-right: 1px solid #ddd;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .sidebar-header {
+            padding: 15px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .load-list { flex: 1; overflow-y: auto; }
+
+        .load-card {
+            padding: 15px;
+            border-bottom: 1px solid #eee;
+            cursor: pointer;
+            transition: all 0.2s;
+            position: relative;
+        }
+        .load-card:hover { background-color: #f1f8fc; }
+        .load-card.active { border-left: 5px solid var(--accent); background-color: #eef6fa; }
+
+        .tags { display: flex; gap: 5px; margin-bottom: 5px; flex-wrap: wrap; }
+        .tag { font-size: 0.7rem; padding: 2px 6px; border-radius: 3px; color: white; font-weight: bold; }
+        
+        .tag-van { background: var(--van); }
+        .tag-reefer { background: var(--reefer); }
+        .tag-flatbed { background: var(--flatbed); }
+        .tag-power { background: #8e44ad; }
+        
+        .tag-headhaul { background: var(--success); color: white; }
+        .tag-backhaul { background: var(--warning); color: #333; }
+
+        .route-text { font-weight: bold; font-size: 0.95rem; color: var(--dark); }
+        .cust-text { font-size: 0.8rem; color: #7f8c8d; }
+        .price-text { font-weight: bold; color: var(--success); float: right; }
+
+        /* MAIN WORKSPACE */
+        .workspace {
+            flex: 1;
+            padding: 20px;
+            background-image: radial-gradient(#cbd5e0 1px, transparent 1px);
+            background-size: 20px 20px;
+            overflow-y: auto;
+            position: relative;
+        }
+
+        .panel {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+            padding: 25px;
+            max-width: 900px;
+            margin: 0 auto;
+            animation: slideUp 0.3s ease-out;
+        }
+        @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+        .info-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin-bottom: 25px; background: #f9f9f9; padding: 15px; border-radius: 6px; }
+        .info-item .label { font-size: 0.75rem; color: #7f8c8d; text-transform: uppercase; letter-spacing: 0.5px; }
+        .info-item .val { font-size: 1rem; font-weight: 600; color: var(--dark); }
+
+        /* CARRIER TABLE */
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 0.9rem; }
+        th { text-align: left; padding: 12px; border-bottom: 2px solid #eee; color: #7f8c8d; font-size: 0.8rem; }
+        td { padding: 12px; border-bottom: 1px solid #eee; vertical-align: middle; }
+        tr:hover { background: #f8f9fa; }
+        
+        .driver-info { display: flex; align-items: center; gap: 10px; }
+        .driver-avatar { width: 30px; height: 30px; background: #ddd; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.8rem; color: #555; }
+        
+        .btn { padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; transition: 0.2s; }
+        .btn-primary { background: var(--accent); color: white; }
+        .btn-primary:hover { background: #2980b9; }
+        .btn-sm { padding: 4px 10px; font-size: 0.8rem; }
+
+        /* MAP OVERLAY */
+        #map-container {
+            position: fixed;
+            bottom: 0; right: 0; left: 0;
+            height: 0;
+            background: white;
+            transition: height 0.3s;
+            box-shadow: 0 -5px 20px rgba(0,0,0,0.1);
+            z-index: 900;
+            display: flex;
+        }
+        #map-container.open { height: 350px; }
+
+        /* MODALS */
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.7);
+            display: flex; justify-content: center; align-items: center;
+            z-index: 2000;
+        }
+        .modal {
+            background: white; padding: 30px; border-radius: 8px;
+            max-width: 700px; width: 90%;
+            max-height: 85vh; overflow-y: auto;
+        }
+        .modal h2 { margin-top: 0; color: var(--primary); border-bottom: 2px solid #eee; padding-bottom: 10px; }
+        .learning-obj { background: #e8f6f3; padding: 15px; border-left: 4px solid var(--success); margin: 15px 0; }
+        .game-rules { background: #fef9e7; padding: 15px; border-left: 4px solid var(--warning); margin: 15px 0; }
+
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+
+    <div id="intro-modal" class="modal-overlay">
+        <div class="modal">
+            <h2>📦 The Broker's Desk: Strategy & Operations</h2>
+            <p>Welcome to the <strong>Logistics Management Simulation</strong>. You are a freight broker in Georgia managing a 3PL desk.</p>
+            
+            <div class="learning-obj">
+                <strong>🎓 Learning Objectives:</strong>
+                <ul style="margin: 5px 0 0 15px;">
+                    <li><strong>Market Dynamics:</strong> Understand <em>Headhaul</em> (Outbound from Hubs) vs. <em>Backhaul</em> (Return trips) pricing.</li>
+                    <li><strong>Modal Selection:</strong> Match freight to equipment (Reefer, Flatbed, Power Only).</li>
+                    <li><strong>Risk Assessment:</strong> Evaluate "Carrier Scorecards" (Service vs. Cost).</li>
+                    <li><strong>Margin Management:</strong> Balance Gross Margin % against On-Time Performance (OTP).</li>
+                </ul>
+            </div>
+
+            <div class="game-rules">
+                <strong>🎮 How to Play:</strong>
+                <ol style="margin: 5px 0 0 15px;">
+                    <li><strong>Analyze the Load:</strong> Look at the <em>Mode</em> (e.g., Reefer needs cooling) and the <em>Lane Type</em>.</li>
+                    <li><strong>Select a Carrier:</strong>
+                        <ul>
+                            <li><span style="color:var(--success)">Green Score:</span> Expensive but reliable.</li>
+                            <li><span style="color:var(--danger)">Red Score:</span> Cheap but high risk of breakdown/claims.</li>
+                        </ul>
+                    </li>
+                    <li><strong>Power Only:</strong> Very cheap, but requires a carrier with compatible power units.</li>
+                    <li><strong>Win Condition:</strong> Keep your Reputation > 50% and maximize Profit.</li>
+                </ol>
+            </div>
+
+            <button class="btn btn-primary" style="width: 100%; padding: 15px;" onclick="startGame()">Start Trading</button>
+        </div>
+    </div>
+
+    <header>
+        <div class="brand">
+            <span>🚛 GA Logistics Sim</span>
+        </div>
+        <div class="stats-bar">
+            <div class="stat-box">
+                <span class="stat-label">CASH</span>
+                <span class="stat-value" id="val-cash">$0</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-label">MARGIN</span>
+                <span class="stat-value" id="val-margin">0%</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-label">OTP SCORE</span>
+                <span class="stat-value" id="val-rep">100</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-label">DAY</span>
+                <span class="stat-value" id="val-day">1</span>
+            </div>
+        </div>
+        <button class="btn btn-sm btn-primary" onclick="toggleMap()">🗺️ Toggle Map</button>
+    </header>
+
+    <div class="container">
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <strong>Available Freight</strong>
+                <button class="btn btn-sm btn-primary" onclick="nextDay()">Next Day >></button>
+            </div>
+            <div class="load-list" id="load-list">
+                <div style="padding:20px; text-align:center; color:#999;">Generating Market...</div>
+            </div>
+        </div>
+
+        <div class="workspace">
+            <div id="empty-state" class="panel" style="text-align: center; color: #7f8c8d;">
+                <h3>Select a Load to Begin</h3>
+                <p>Click on any available load in the left sidebar to view details and source carriers.</p>
+            </div>
+
+            <div id="detail-panel" class="panel hidden">
+                <div style="display:flex; justify-content:space-between; margin-bottom: 20px;">
+                    <h2 style="margin:0; border:none;" id="d-title">Load #1001</h2>
+                    <span class="tag tag-headhaul" id="d-market-tag" style="font-size: 1rem; padding: 5px 10px;">HEADHAUL MARKET</span>
+                </div>
+
+                <div class="info-grid">
+                    <div class="info-item">
+                        <span class="label">Customer</span>
+                        <div class="val" id="d-cust">Home Depot</div>
+                    </div>
+                    <div class="info-item">
+                        <span class="label">Commodity</span>
+                        <div class="val" id="d-comm">Lumber</div>
+                    </div>
+                    <div class="info-item">
+                        <span class="label">Equipment</span>
+                        <div class="val" id="d-mode" style="color:var(--accent)">Flatbed</div>
+                    </div>
+                    <div class="info-item">
+                        <span class="label">Customer Rate</span>
+                        <div class="val" id="d-rate" style="color:var(--success)">$1,200</div>
+                    </div>
+                    <div class="info-item">
+                        <span class="label">Origin</span>
+                        <div class="val" id="d-origin">Savannah, GA</div>
+                    </div>
+                    <div class="info-item">
+                        <span class="label">Destination</span>
+                        <div class="val" id="d-dest">Atlanta, GA</div>
+                    </div>
+                    <div class="info-item">
+                        <span class="label">Distance</span>
+                        <div class="val" id="d-miles">250 mi</div>
+                    </div>
+                    <div class="info-item">
+                        <span class="label">Requirements</span>
+                        <div class="val" id="d-reqs">Tarp Required</div>
+                    </div>
+                </div>
+
+                <h3>Available Carriers</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Carrier / Driver</th>
+                            <th>Equipment</th>
+                            <th>Reliability</th>
+                            <th>Quote</th>
+                            <th>Margin</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="carrier-table">
+                        </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div id="map-container">
+        <div style="flex: 2; background: #e0e7ec; position: relative;">
+            <svg id="ga-map" viewBox="0 0 400 450" style="width: 100%; height: 100%;">
+                <path d="M 120,20 L 280,40 L 350,200 L 380,300 L 350,400 L 250,440 L 150,440 L 50,400 L 20,200 Z" fill="#fff" stroke="#aaa" stroke-width="2" />
+                
+                <g id="map-cities">
+                    </g>
+                <g id="map-lanes"></g>
+            </svg>
+        </div>
+        <div style="flex: 1; padding: 20px; overflow-y: auto; border-left: 1px solid #ddd;">
+            <h4 style="margin-top:0;">Active Lanes</h4>
+            <ul id="lane-log" style="padding-left: 20px; font-size: 0.85rem;"></ul>
+        </div>
+        <button onclick="toggleMap()" style="position: absolute; top: 10px; right: 10px; padding: 5px;">X</button>
+    </div>
+
+    <script>
+        // --- DATA ---
+        const CITIES = {
+            'Atlanta': {x: 140, y: 150, type: 'Headhaul'}, // Hub
+            'Savannah': {x: 330, y: 300, type: 'Headhaul'}, // Port
+            'Dalton': {x: 130, y: 50, type: 'Backhaul'}, // Manufacturing
+            'Valdosta': {x: 200, y: 400, type: 'Backhaul'}, // Ag
+            'Augusta': {x: 280, y: 180, type: 'Neutral'},
+            'Columbus': {x: 80, y: 260, type: 'Neutral'},
+            'Athens': {x: 200, y: 130, type: 'Neutral'}
+        };
+
+        const CUSTOMERS = [
+            { name: "Home Depot", comm: "Lumber", mode: "Flatbed", req: "Must Tarp" },
+            { name: "Coca-Cola", comm: "Syrup", mode: "Reefer", req: "Temp: 34°F" },
+            { name: "Georgia Pacific", comm: "Paper", mode: "Dry Van", req: "Clean Trailer" },
+            { name: "Shaw Floors", comm: "Carpet", mode: "Dry Van", req: "Floor Load" },
+            { name: "Publix", comm: "Produce", mode: "Reefer", req: "Continuous Cool" },
+            { name: "Amazon", comm: "Drop Trailer", mode: "Power Only", req: "Bobtail In" }
+        ];
+
+        const CARRIERS = [
+            { name: "Swift", score: 75, fleet: "Van" },
+            { name: "Old Dominion", score: 95, fleet: "Van" },
+            { name: "Maverick", score: 92, fleet: "Flatbed" },
+            { name: "Prime Inc", score: 90, fleet: "Reefer" },
+            { name: "Billy Bob's Trucking", score: 60, fleet: "Any" },
+            { name: "Coyote", score: 85, fleet: "Power Only" },
+            { name: "Landstar", score: 88, fleet: "Flatbed" }
+        ];
+
+        // --- STATE ---
+        let state = {
+            cash: 0,
+            revenue: 0,
+            cost: 0,
+            rep: 100,
+            day: 1,
+            loads: [],
+            activeLoadId: null,
+            history: []
+        };
+
+        // --- INIT ---
+        function startGame() {
+            document.getElementById('intro-modal').style.display = 'none';
+            initMap();
+            generateDay();
+        }
+
+        function initMap() {
+            const g = document.getElementById('map-cities');
+            for(let c in CITIES) {
+                const city = CITIES[c];
+                // Draw circle
+                const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+                circle.setAttribute("cx", city.x);
+                circle.setAttribute("cy", city.y);
+                circle.setAttribute("r", 5);
+                circle.setAttribute("fill", "#2c3e50");
+                g.appendChild(circle);
+                
+                // Draw label
+                const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+                text.setAttribute("x", city.x + 8);
+                text.setAttribute("y", city.y + 4);
+                text.setAttribute("font-size", "10");
+                text.setAttribute("fill", "#555");
+                text.textContent = c;
+                g.appendChild(text);
+            }
+        }
+
+        // --- LOGIC ---
+        function generateDay() {
+            state.loads = [];
+            const loadCount = 4; // Loads per day
+            
+            for(let i=0; i<loadCount; i++) {
+                const keys = Object.keys(CITIES);
+                const origin = keys[Math.floor(Math.random()*keys.length)];
+                let dest = origin;
+                while(dest === origin) dest = keys[Math.floor(Math.random()*keys.length)];
+                
+                const cust = CUSTOMERS[Math.floor(Math.random()*CUSTOMERS.length)];
+                
+                // Calc Distance
+                const dist = Math.floor(Math.sqrt(Math.pow(CITIES[origin].x - CITIES[dest].x, 2) + Math.pow(CITIES[origin].y - CITIES[dest].y, 2)) * 1.5);
+                
+                // Rate Logic: Headhaul is expensive
+                let ratePerMile = 2.5;
+                let marketType = "Neutral";
+                
+                if (CITIES[origin].type === 'Headhaul') {
+                    ratePerMile = 3.5;
+                    marketType = "Headhaul";
+                } else if (CITIES[origin].type === 'Backhaul') {
+                    ratePerMile = 1.8;
+                    marketType = "Backhaul";
+                }
+
+                // Mode Premiums
+                if(cust.mode === 'Reefer') ratePerMile += 0.5;
+                if(cust.mode === 'Flatbed') ratePerMile += 0.6;
+                if(cust.mode === 'Power Only') ratePerMile -= 0.4; // Discount for power only
+
+                const revenue = Math.floor(dist * ratePerMile);
+                
+                state.loads.push({
+                    id: Date.now() + i,
+                    cust: cust.name,
+                    comm: cust.comm,
+                    mode: cust.mode,
+                    req: cust.req,
+                    origin: origin,
+                    dest: dest,
+                    dist: dist,
+                    market: marketType,
+                    revenue: revenue,
+                    baseCost: revenue * 0.85 // Target 15% margin
+                });
+            }
+            renderSidebar();
+        }
+
+        function renderSidebar() {
+            const list = document.getElementById('load-list');
+            list.innerHTML = '';
+            
+            state.loads.forEach(l => {
+                const div = document.createElement('div');
+                div.className = 'load-card';
+                div.onclick = () => loadDetail(l.id);
+                
+                let modeClass = 'tag-van';
+                if(l.mode === 'Reefer') modeClass = 'tag-reefer';
+                if(l.mode === 'Flatbed') modeClass = 'tag-flatbed';
+                if(l.mode === 'Power Only') modeClass = 'tag-power';
+
+                let marketClass = l.market === 'Headhaul' ? 'tag-headhaul' : (l.market === 'Backhaul' ? 'tag-backhaul' : '');
+
+                div.innerHTML = `
+                    <div class="tags">
+                        <span class="tag ${modeClass}">${l.mode}</span>
+                        ${marketClass ? `<span class="tag ${marketClass}">${l.market}</span>` : ''}
+                    </div>
+                    <div class="route-text">${l.origin} &rarr; ${l.dest}</div>
+                    <div class="cust-text">${l.cust} (${l.dist} mi)</div>
+                    <div class="price-text">$${l.revenue}</div>
+                `;
+                list.appendChild(div);
+            });
+        }
+
+        function loadDetail(id) {
+            state.activeLoadId = id;
+            const load = state.loads.find(l => l.id === id);
+            
+            document.getElementById('empty-state').classList.add('hidden');
+            document.getElementById('detail-panel').classList.remove('hidden');
+
+            // Bind Data
+            document.getElementById('d-title').innerText = `Load #${id.toString().slice(-4)}`;
+            document.getElementById('d-market-tag').innerText = `${load.market.toUpperCase()} MARKET`;
+            document.getElementById('d-market-tag').className = `tag ${load.market === 'Headhaul' ? 'tag-headhaul' : 'tag-backhaul'}`;
+            
+            document.getElementById('d-cust').innerText = load.cust;
+            document.getElementById('d-comm').innerText = load.comm;
+            document.getElementById('d-mode').innerText = load.mode;
+            document.getElementById('d-rate').innerText = `$${load.revenue}`;
+            document.getElementById('d-origin').innerText = load.origin;
+            document.getElementById('d-dest').innerText = load.dest;
+            document.getElementById('d-miles').innerText = `${load.dist} miles`;
+            document.getElementById('d-reqs').innerText = load.req;
+
+            // Generate Carriers
+            renderCarrierTable(load);
+        }
+
+        function renderCarrierTable(load) {
+            const tbody = document.getElementById('carrier-table');
+            tbody.innerHTML = '';
+
+            // Generate 3 random carrier options
+            const options = [];
+            for(let i=0; i<3; i++) {
+                const baseC = CARRIERS[Math.floor(Math.random()*CARRIERS.length)];
+                
+                // Adjust cost based on reliability
+                let costFactor = 1.0;
+                if(baseC.score > 90) costFactor = 1.1; // Expensive
+                if(baseC.score < 75) costFactor = 0.8; // Cheap
+
+                // Logic: Is this carrier equipped?
+                let equipmentMatch = true;
+                if(baseC.fleet !== 'Any' && baseC.fleet !== load.mode && load.mode !== 'Power Only') {
+                    // Mismatch (e.g. Van carrier for Flatbed load)
+                    // We simulate this by making them VERY expensive (outsourcing) or unavailable
+                    costFactor = 1.5; 
+                }
+
+                const cost = Math.floor(load.baseCost * costFactor * (0.9 + Math.random()*0.2));
+                const margin = load.revenue - cost;
+                
+                options.push({
+                    name: baseC.name,
+                    score: baseC.score,
+                    fleet: baseC.fleet,
+                    cost: cost,
+                    margin: margin,
+                    driver: ['Bob', 'Sarah', 'Mike', 'Big Al'][Math.floor(Math.random()*4)],
+                    truck: 2018 + Math.floor(Math.random()*6)
+                });
+            }
+
+            options.forEach((opt, idx) => {
+                const tr = document.createElement('tr');
+                const scoreColor = opt.score >= 90 ? 'good' : (opt.score < 75 ? 'bad' : 'var(--warning)');
+                const marginColor = opt.margin > 0 ? 'good' : 'bad';
+                
+                tr.innerHTML = `
+                    <td>
+                        <div class="driver-info">
+                            <div class="driver-avatar">${opt.driver[0]}</div>
+                            <div>
+                                <div>${opt.name}</div>
+                                <div style="font-size:0.75rem; color:#888;">Driver: ${opt.driver} ('${opt.truck})</div>
+                            </div>
+                        </div>
+                    </td>
+                    <td>${opt.fleet}</td>
+                    <td style="color:${scoreColor}; font-weight:bold;">${opt.score}%</td>
+                    <td>$${opt.cost}</td>
+                    <td style="color:${marginColor}; font-weight:bold;">$${opt.margin}</td>
+                    <td><button class="btn btn-sm btn-primary" onclick="bookLoad(${idx})">Book</button></td>
+                `;
+                // Attach data for booking
+                tr.dataset.json = JSON.stringify(opt);
+                tbody.appendChild(tr);
+            });
+        }
+
+        function bookLoad(idx) {
+            const rows = document.querySelectorAll('#carrier-table tr');
+            const opt = JSON.parse(rows[idx].dataset.json);
+            const load = state.loads.find(l => l.id === state.activeLoadId);
+
+            // RISK CHECK
+            let success = true;
+            let finalMargin = opt.margin;
+            let msg = "Load Delivered Successfully.";
+            
+            // 1. Equipment Mismatch Risk
+            if (load.mode === 'Reefer' && opt.fleet === 'Van') {
+                success = false;
+                msg = "FAILURE: You booked a Dry Van for a Reefer load! Product spoiled.";
+                finalMargin -= 1000; // Claim
+            }
+            // 2. Reliability Roll
+            else if (Math.random() * 100 > opt.score) {
+                success = false;
+                msg = `DELAY: ${opt.name} broke down. Customer is angry.`;
+                finalMargin -= 200; // Late fee
+            }
+
+            // Update Stats
+            state.cash += finalMargin;
+            state.revenue += load.revenue;
+            state.cost += opt.cost;
+            if(!success) state.rep -= 10;
+            else state.rep = Math.min(100, state.rep + 1);
+
+            // Update UI
+            updateHeader();
+            
+            // Map Line
+            addLaneToMap(load, success);
+
+            // Remove Load
+            state.loads = state.loads.filter(l => l.id !== state.activeLoadId);
+            document.getElementById('detail-panel').classList.add('hidden');
+            document.getElementById('empty-state').classList.remove('hidden');
+            renderSidebar();
+
+            alert(`${msg}\nProfit impact: $${finalMargin}`);
+        }
+
+        function updateHeader() {
+            document.getElementById('val-cash').innerText = `$${state.cash}`;
+            document.getElementById('val-rep').innerText = state.rep;
+            
+            let marginPct = 0;
+            if(state.revenue > 0) marginPct = ((state.revenue - state.cost) / state.revenue) * 100;
+            document.getElementById('val-margin').innerText = `${marginPct.toFixed(1)}%`;
+        }
+
+        function nextDay() {
+            state.day++;
+            document.getElementById('val-day').innerText = state.day;
+            generateDay();
+        }
+
+        // --- MAP FUNCTIONS ---
+        function toggleMap() {
+            const el = document.getElementById('map-container');
+            if(el.classList.contains('open')) el.classList.remove('open');
+            else el.classList.add('open');
+        }
+
+        function addLaneToMap(load, success) {
+            const g = document.getElementById('map-lanes');
+            const start = CITIES[load.origin];
+            const end = CITIES[load.dest];
+
+            const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+            line.setAttribute("x1", start.x);
+            line.setAttribute("y1", start.y);
+            line.setAttribute("x2", end.x);
+            line.setAttribute("y2", end.y);
+            line.setAttribute("stroke", success ? "#27ae60" : "#c0392b");
+            line.setAttribute("stroke-width", "3");
+            line.setAttribute("stroke-dasharray", "5");
+            
+            // Animate
+            const anim = document.createElementNS("http://www.w3.org/2000/svg", "animate");
+            anim.setAttribute("attributeName", "stroke-dashoffset");
+            anim.setAttribute("from", "100");
+            anim.setAttribute("to", "0");
+            anim.setAttribute("dur", "2s");
+            anim.setAttribute("repeatCount", "indefinite");
+            line.appendChild(anim);
+            
+            g.appendChild(line);
+
+            // Add to log
+            const log = document.getElementById('lane-log');
+            const li = document.createElement('li');
+            li.style.color = success ? 'green' : 'red';
+            li.innerText = `${load.origin} > ${load.dest} (${load.mode}): ${success ? 'OK' : 'FAIL'}`;
+            log.prepend(li);
+        }
+
+    </script>
+</body>
+</html>
